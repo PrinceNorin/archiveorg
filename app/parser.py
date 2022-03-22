@@ -11,21 +11,31 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def get_files(url: str) -> List[str]:
+def get_files(url: str) -> List[dict]:
     url = url.replace('/details/', '/download/')
     url = url[:-1] if url.endswith('/') else url
 
     try:
         content = requests.get(url).text
         html = BeautifulSoup(content, features='html.parser')
-        rows = html.select('table.directory-listing-table a')
+        links = html.select('table.directory-listing-table td > a:first-child')
+        sizes = html.select('table.directory-listing-table tr > td:nth-child(3)')
 
-        if len(rows) < 1:
+        if len(links) < 1:
             return []
 
-        return [f"{url}/{row['href']}" for row in rows[1:]]
+        files = []
+        for i in range(1, len(links[1:])):
+            row = links[i]
+            files.append({
+                'url': f"{url}/{row['href']}",
+                'filename': row.text,
+                'size': sizes[i].text,
+            })
+
+        return files
     except Exception as e:
-        logger.exception(f'Failed to get page: {e}', err=e)
+        logger.exception(f'Failed to get page: {e}')
         return []
 
 
@@ -55,7 +65,7 @@ class AsyncFetchFile(Thread):
         super().__init__()
 
         self.url = url
-        self.urls = []
+        self.files = []
 
     def run(self):
-        self.urls = get_files(self.url)
+        self.files = get_files(self.url)
